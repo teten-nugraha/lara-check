@@ -1,29 +1,48 @@
-FROM serversideup/php:8.3-fpm-nginx
+# ---- Base PHP image ----
+FROM php:8.2-fpm-alpine
 
-ENV PHP_OPCACHE_ENABLE=1
+# Install system dependencies
+RUN apk add --no-cache \
+    nginx \
+    git \
+    unzip \
+    curl \
+    libzip-dev \
+    oniguruma-dev \
+    bash
 
-USER root
+# Install PHP extensions
+RUN docker-php-ext-install \
+    pdo \
+    pdo_mysql \
+    zip \
+    mbstring
 
-# Install Node.js
-RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
-    && apt-get update \
-    && apt-get install -y nodejs \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+# Copy Composer
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
-# Copy application files
-COPY --chown=www-data:www-data . /var/www/html
+# Set working directory
+WORKDIR /var/www/html
 
-# Switch to non-root user
-USER www-data
-
-# Install dependencies and build
-RUN npm ci \
-    && npm run build \
-    && rm -rf /var/www/html/.npm
+# Copy source code
+COPY . .
 
 # Install PHP dependencies
-RUN composer install --no-interaction --optimize-autoloader --no-dev
+RUN composer install \
+    --no-dev \
+    --no-interaction \
+    --prefer-dist \
+    --optimize-autoloader
 
-# Remove composer cache
-RUN rm -rf /var/www/html/.composer/cache
+# Laravel permissions
+RUN chown -R www-data:www-data storage bootstrap/cache \
+    && chmod -R 775 storage bootstrap/cache
+
+# Copy Nginx config
+COPY docker/nginx.conf /etc/nginx/nginx.conf
+
+# Expose HTTP port
+EXPOSE 80
+
+# Start Nginx & PHP-FPM
+CMD ["sh", "-c", "php-fpm -D && nginx -g 'daemon off;'"]
