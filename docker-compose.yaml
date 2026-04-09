@@ -6,7 +6,7 @@ services:
     build:
       context: .
     ports:
-      - "80:80"
+      - "1212:80"
     restart: unless-stopped
     env_file:
       - .env
